@@ -2,41 +2,38 @@
 
 <!-- toc -->
 
-
-When reading the diagrams below, keep in mind that glyphs assumes a
-little-endian format, which means the least significant bytes (and bits)
-come first.
+In general, the _glyph_ format uses little-endian byte ordering, as this is the
+de-facto standard for most modern processors. For consistency, and for clarity
+when bit fields span multiple bytes, this means that bit order within bytes is
+also presented with the least significant bit first.
 
 ## The Glyph Header
 
 ```mermaid
 ---
-title: "Glyph Header"
+title: "Glyph Header (bits)"
 ---
 packet-beta
-0-3: "Version"
-4-7: "Reserved"
-8-10: "Padding"
-11: "Long"
-12-15: "Reserved"
+0-2: "Padding Bytes"
+3: "L"
+4-7: "Glyphs Version"
+8-15: "Reserved"
 16-31: "Glyph Type"
 32-63: "Length (8-byte Words) or Short Content"
 ```
 
-![Glyph Header](images/header.png)
-
 - __Version__. A 4-bit unsigned integer describing the version of GLIFS.
   Currently, these bit must all be set to zero.
+- __Long Bit__. If this bit is set to zero, the content length field is
+  ignored, and 4 bytes of data can be stored in that field instead. If the bit
+  is set to one, then the content length field is interpreted normally (see
+  below).
 - __Padding__. A 3-bit unsigned integer describing the amount of zero-padding
   at the end of a glyph. As the length field specifies the length of the
   content section in increments of 8 bytes, glyphs with content requiring a
   specific byte length are required to be zero-padded. For example, if storing
   a 13-byte UTF string, the content length field would be equal to 2 (16 bytes)
   and the padding bits would be set to `011` (3).
-- __Long Bit__. If this bit is set to zero, the content length field is
-  ignored, and 4 bytes of data can be stored in that field instead. If the bit
-  is set to one, then the content length field is interpreted normally (see
-  below).
 - __Glyph Type__. A little-endian 16-bit unsigned integer describing the type
   of data stored in the content section. In the experimental version of GLIFS,
   this list is stored in the `enum GlyphType` in `glyph.rs`.
@@ -50,49 +47,49 @@ alignment (up to 8 bytes) when necessary.
 
 ## Unit Glyphs
 
+```mermaid
+---
+title: "Unit Glyph (Short Glyph Header, bits)"
+---
+packet-beta
+0-2: "Padding Bytes"
+3: "0"
+4-7: "Glyphs Version"
+8-15: "Reserved"
+16-31: "GlyphType::Unit"
+32-63: "UnitTypes (a u32 enum, in little-endian format)"
+```
+
 Unit glyphs are used to represent unit types, that is, types that hold only one
 value and thus no information. In other words, these are types for which we are
 only interested in knowing the specific type but do not need to store any data
-apart from the type identifier. See
-the [wikipedia article](https://en.wikipedia.org/wiki/Unit_type) for a short
+apart from the type identifier.
+Seethe [wikipedia article](https://en.wikipedia.org/wiki/Unit_type) for a short
 description.
 
 One of the most common use of the unit type is probably as the value for
 `Option::None`, used but other kinds of unit types can also be useful.
 
-```mermaid
----
-title: "Unit Glyph (Short Glyph Header)"
----
-packet-beta
-0-3: "Version"
-4-7: "Reserved"
-8-10: "0"
-11: "0"
-12-15: "Reserved"
-16-31: "GlyphType::Unit"
-32-63: "UnitTypes (a u32 enum, in little-endian format)"
-```
-
 ## Boolean Glyphs
 
-A single true/false value. As a short glyph, the "long bit" is set to zero and
-the contents are placed in the length field. Can be found in `basic.rs` as the
-type `BoolG`.
-
 ```mermaid
 ---
-title: "Boolean Glyph (Short Glyph Header)"
+title: "Boolean Glyph (Short Glyph Header, bits)"
 ---
 packet-beta
-0-3: "Version"
-4-7: "Reserved"
-8-10: "0"
-11: "0"
-12-15: "Reserved"
+0-2: "Padding Bytes"
+3: "0"
+4-7: "Glyphs Version"
+8-15: "Reserved"
 16-31: "GlyphType::Boolean"
 32-63: "All zeros means false, any other value means true"
 ```
+
+A single true/false value. As a short glyph, the "long bit" is set to zero and
+the contents are placed in the length field. When read, a value of all zeros
+means `false`, and any other value means `true`. Can be found in `basic.rs` as
+the
+type `BoolG`.
 
 ### Bit Vector Glyphs
 
@@ -114,18 +111,17 @@ found in `basic.rs` as the type `BitVecG`.
 
 ```mermaid
 ---
-title: "Bit Vector Glyph"
+title: "Bit Vector Glyph (bits)"
 ---
 packet-beta
-0-3: "Version"
-4-7: "Reserved"
-8-10: "Padding"
-11: "1"
-12-15: "Reserved"
+0-2: "Padding Bytes"
+3: "L"
+4-7: "Glyphs Version"
+8-15: "Reserved"
 16-31: "GlyphType::VecBool"
 32-63: "Length of content, in 8-byte words"
-64-68: "Reserved (0)"
-69-71: "Bits Padding"
+64-66: "Bits Padding"
+67-71: "Reserved (0)"
 72-95: "Data..."
 ```
 
@@ -134,8 +130,8 @@ packet-beta
 Currently, numeric types are spearated into three types--signed, unsigned, and
 floating point. Different lengths are supported based on the length of the glyph
 itself, with 32-, 64-, and 128-bit versions supported for integer types, and 32-
-and 64-bit versions are supported for floating point types. See `basic::IntG`,
-`basic::UIntG` and `basic::FloatG` for more details.
+and 64-bit versions are supported for floating point types. See
+`basic::IntGlyph`, `basic::UIntGlyph` and `basic::FloatGlyph` for more details.
 
 Additionally, as the overhead of a glyph header and type checking would be
 unreasonable when dealing with numeric arrays, more specific arrays can
@@ -147,14 +143,13 @@ Example: 32-bit Unsigned Integer.
 
 ```mermaid
 ---
-title: "32-bit Unsigned Integer Glyph"
+title: "32-bit Unsigned Integer Glyph (bits)"
 ---
 packet-beta
-0-3: "Version"
-4-7: "Reserved"
-8-10: "0"
-11: "0"
-12-15: "Reserved"
+0-2: "Padding Bytes"
+3: "0"
+4-7: "Glyphs Version"
+8-15: "Reserved"
 16-31: "GlyphType::UnsignedInt"
 32-63: "Unsigned 32-bit Integer (Little Endian)"
 ```
@@ -163,14 +158,13 @@ Example: 128-bit Signed Integer
 
 ```mermaid
 ---
-title: "128-bit Signed Integer Glyph"
+title: "128-bit Signed Integer Glyph (bits)"
 ---
 packet-beta
-0-3: "Version"
-4-7: "Reserved"
-8-10: "0"
-11: "1"
-12-15: "Reserved"
+0-2: "Padding Bytes"
+3: "1"
+4-7: "Glyphs Version"
+8-15: "Reserved"
 16-31: "GlyphType::SignedInt"
 32-63: "2"
 64-191: "Signed 128-bit Integer (Little Endian)"
@@ -180,14 +174,13 @@ Example: 64-bit Floating Point
 
 ```mermaid
 ---
-title: "64-bit Floating Point Glyph"
+title: "64-bit Floating Point Glyph (bits)"
 ---
 packet-beta
-0-3: "Version"
-4-7: "Reserved"
-8-10: "0"
-11: "1"
-12-15: "Reserved"
+0-2: "Padding Bytes"
+3: "1"
+4-7: "Glyphs Version"
+8-15: "Reserved"
 16-31: "GlyphType::FloatingPoint"
 32-63: "1"
 64-127: "64-bit Floating Point IEEE-754 (Little Endian)"
@@ -198,46 +191,47 @@ dimensioned tensors, imaginary numbers, large decimals, and so on.
 
 ## Language Types
 
-Strings are encoded in UTF-8, with additional metadata for language and locale.
-Feedback is requested on whether encodings other than `UTF-8` should be
-supported, as well as the proper collation method.
-
 ### String Glyphs
 
 ```mermaid
 ---
-title: "String Glyph"
+title: "String Glyph (bits)"
 ---
 packet-beta
-0-3: "Version"
-4-7: "Reserved"
-8-10: "Padding"
-11: "1"
-12-15: "Reserved"
+0-2: "Padding Bytes"
+3: "L"
+4-7: "Glyphs Version"
+8-15: "Reserved"
 16-31: "GlyphType::String"
 32-63: "Length of content, in 8-byte words"
-64-65: "Encoding"
-66-71: "Locale"
-72-79: "Language"
-80-95: "String Data..."
+64-71: "Language"
+72-77: "Reserved"
+78-79: "Direction"
+80-121: "UTF-8 Data"
+122-127: "Zero Padding"
+
 ```
+
+Strings are encoded in UTF-8, with additional metadata for language and text
+direction. (These choices were informed by a
+2024 [W3C working group paper](https://www.w3.org/TR/string-meta/).)  Feedback
+is requested on whether encodings other than `UTF-8` should be supported, the
+proper collation method, and any discussion of additional metadata that should
+be included.
 
 The default collation method for the `str` type in rust is language-unaware
 bytewise comparison, but unicode sorting using the default locale seems like it
 would be preferable. Currently, string collation is performed with the
 `icu_collcation` crate using the default collation options and locale.
 
-The value of the language correspond with `enum Language` in `lang.rs`, while
-the full `enum Locale` depends on the `u16` value of those two bytes, with the
-bits for encoding masked off. This allows us to easily get the language
-separately from the combined language / place locale. It allows for 256
-languages (the list I found had ~100) and up to 64 places per language (the list
-I found had a max of ~16 per language). Feedback is requested whether this is
-the appropriate strategy for representing this information.
+The value of the language field corresponds with `enum Language` in `lang.rs`.
+The list of languages there was taken from the Wikipedia's list
+of [ISO 639 language codes](https://en.wikipedia.org/wiki/List_of_ISO_639_language_codes)
+as of 2025.01.10.
 
 ### Character Glyphs
 
-Character glyphs currently reflect the rust type `char`, which the documentation
+Character glyphs currently reflect the rust `char` type, which the documentation
 referrs to as a "Unicode Scalar Value".
 
 ```mermaid
@@ -245,11 +239,10 @@ referrs to as a "Unicode Scalar Value".
 title: "Character Glyph"
 ---
 packet-beta
-0-3: "Version"
-4-7: "Reserved"
-8-10: "0"
-11: "0"
-12-15: "Reserved"
+0-2: "Padding Bytes"
+3: "L"
+4-7: "Glyphs Version"
+8-15: "Reserved"
 16-31: "GlyphType::UnicodeChar"
 32-63: "Data (Unicode Scalar Value, LE)"
 ```
@@ -263,31 +256,25 @@ and updated directly by cliets / peers without performing collation.
 
 ### Tuple Glyphs
 
-Tuple Glyphs can contain an abitrary number of item glyphs, though they are
-intended to be used (1) with a relatively small number and (2) where all items
-will be decoded, as there is no random access to the individual items. For the
-raw glyph type, see `collections::TupleG`. Encoding and decoding is provided for
-rust tuples up to length 6.
+Tuple Glyphs can contain an abitrary number of item glyphs, though they
+arenintended to be used (1) with a relatively small number and (2) where all
+items will be decoded, as there is no random access to the individual items. For
+the raw glyph type, see `TupleGlyph`. Encoding and decoding is currently
+provided for rust tuples up to length 6.
 
-Glyphs that are either (1) short or (2) with a content length of zero are
-interpreted as a tuple of length zero.
+Glyphs that are either (1) short or (2) long but with a content length of zero
+are interpreted as tuples of length zero.
 
 ```mermaid
 ---
-title: "Tuple Glyph"
+title: "Tuple Glyph (bytes)"
 ---
 packet-beta
-0-3: "Version"
-4-7: "Reserved"
-8-10: "0"
-11: "Long"
-12-15: "Reserved"
-16-31: "GlyphType::Tuple"
-32-63: "Length (in 8-byte words)"
-64-127: "Glyph #0 ..."
-128-191: "Glyph #1 ..."
-192-255: "..."
-256-319: "Glyph #N ..."
+0-7: "Glyph Header"
+8-47: "Item #0..."
+48-55: "Item #1..."
+56-63: "Item #2..."
+
 ```
 
 ### Vector Glyphs
@@ -305,61 +292,48 @@ at the end of the offsets table so that the first glyph starts on an 8-byte
 boundary.
 
 Glyphs that are either (1) short or (2) with a content length of zero are
-interpreted as a vectors of length zero.
-
-See the `collections::VecG` type for more details.
+interpreted as a vectors of length zero. See the `VecGlyph` type for more
+details.
 
 ```mermaid
 ---
-title: "Vector Glyph"
+title: "Vector Glyph (bytes)"
 ---
 packet-beta
-0-3: "Glyph Version"
-4: "Long"
-5-7: "0"
-8-15: "Reserved (Future Use)"
-16-31: "GlyphType::Vector"
-32-63: "Length (in 8-byte words)"
-64-95: "# of Items (u32)"
-96-127: "Offset of Item #0"
-128-159: "Offset of Item #1"
-160-191: "Zero Padding (if necessary)"
-192-255: "Glyph #0 ..."
-256-319: "Glyph #1 ..."
+0-7: "Glyph Header"
+8-11: "# of Items (u32)"
+12-15: "Offset of Item #0"
+16-19: "Offset of Item #1"
+20-23: "Zero Padding"
+24-47: "Glyph #0 ..."
+48-63: "Glyph #1 ..."
 ```
 
 ### Basic Vector Glyphs
 
 Basic vector glyphs are intended for use when storing a large number of items of
 the same type and fixed length, so the storage and processing overhead of a
-glyph header for each item can be avoided. Basic types are generally those that
-are represented in memory natively with a `[T; len]`, in a fixed-endian format,
-and that require an alignment of `8` or less.
+glyph header for each item can be avoided. When possible (they can use a
+fixed-endian format and require an alignment of 8 bytes or less), they use
+common in-memory formats and can be referenced as simply a `&[T]`.
 
-Basic vector glyphs are also useful for tensors, with a header that specifies a
-tensor rank and an optional array of `[u32]` to provide the sizes for each
-tensor dimension. Feedback is welcome on whether this facility is useful.
+Basic vector glyphs can also optionally store rank and dimensionality for
+tensors of arbitrary length. For details, see the `BasicVecGlyph` type. Feedback
+is welcome on whether this facility is useful.
 
 ```mermaid
 ---
-title: "Basic Vector Glyph"
+title: "Basic Vector Glyph (Bytes)"
 ---
 packet-beta
-0-3: "Version"
-4-7: "Reserved"
-8-10: "Padding"
-11: "1"
-12-15: "Reserved"
-16-31: "GlyphType::BasicVecGlyph"
-32-63: "Length (in 8-byte words)"
-64-71: "Reserved (0)"
-72-79: "Tensor Rank"
-80-95: "Basic Type ID (u16)"
-96-111: "Type Length (in bytes, u16)"
-112-127: "Reserved (0)"
-128-159: "Size of dimension #0 (u32, if necessary) ..."
-160-191: "Zero Padding (if necessary)"
-192-255: "Raw data for [T] ..."
+0-7: "Glyph Header"
+8-9: "Type ID"
+10-11: "Rank"
+12-15: "Size_0"
+16-19: "Size_1"
+20-23: "Padding (opt)"
+24-43: "Array of [T]..."
+44-47: "Padding"
 ```
 
 ### Map Glyphs
@@ -368,39 +342,26 @@ Map glyphs are similar to vector glyphs, but for the fact that both a key and
 value are stored at each offset.
 
 Ideally, maps should be written so that keys are in sorted order and therefore
-items can be found by key value with a binary search in `log(2)` time. However,
-this is somewhat complex, as it currently would require either (1) ensuring that
-items are presented to the code that writes map glyphs provides the source types
-in the same order as the resulting glyphs would be sorted, or (2) buffering
-written key/value pairs so that they can be sorted and written to the map glyph
-after they've been converted to glyphs themselves. Contributions are currently
+items can be found by key value with a binary search in `log(2)` time. However, this requires a consitent sort order for glyphs.  Additionally, this may interact with practical encoding issues for some sources of map data (e.g., `HashMap`s, etc...). Contributions are currently
 welcome along these lines.
 
-Glyphs that are either (1) short or (2) with a content length of zero are
-interpreted as a maps with length zero.
-
-See `collections::MapG` for more info.
+See `MapGlyph` for more info.
 
 ```mermaid
 ---
-title: "Map Glyph"
+title: "Map Glyph (bytes)"
 ---
 packet-beta
-0-3: "Version"
-4-7: "Reserved"
-8-10: "0"
-11: "Long"
+0-7: "Glyph Header (GlyphType::Map)"
+8-11: "# of Items (u32)"
 12-15: "Reserved"
-16-31: "GlyphType::Map"
-32-63: "Length (in 8-byte words)"
-64-95: "# of Items (u32)"
-96-127: "Offset of K/V Pair #0"
-128-159: "Offset of K/V Pair #1"
-160-191: "Zero Padding (if necessary)"
-192-255: "Key #0 ..."
-256-319: "Value #0 ..."
-320-383: "Key #1 ..."
-384-447: "Value #1 ..."
+16-19: "Offset of K/V Pair #0"
+20-23: "Offset of K/V Pair #0"
+24-31: "Zero Padding"
+32-39: "Key #0 ..."
+40-47: "Value #0 ..."
+48-55: "Key #1 ..."
+56-63: "Value #1 ..."
 ```
 
 ## Structured Types
